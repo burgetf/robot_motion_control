@@ -1,0 +1,5 @@
+lbr_7_joint lbr_6_joint lbr_5_joint lbr_4_joint 
+lbr_3_joint lbr_2_joint lbr_1_joint
+1 1 1 1 1 1 1
+0.3 0.77 -1.45 -0.80 -0.74 -0.61 0.74
+ 

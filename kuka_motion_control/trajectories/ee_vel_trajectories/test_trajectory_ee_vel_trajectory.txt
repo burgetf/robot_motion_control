@@ -1,0 +1,2 @@
+Xdot   Ydot   Zdot   rotXdot   rotYdot   rotZdot
+0.0 0.0 0.0 0.0 0.0 0.0
