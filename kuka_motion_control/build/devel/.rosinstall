@@ -1,2 +1,0 @@
-- setup-file:
-    local-name: /home/burgetf/catkin_ws/src/robot_motion_control/kuka_motion_control/build/devel/setup.sh

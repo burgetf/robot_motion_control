@@ -1,8 +1,0 @@
-prefix=/usr/local
-
-Name: kuka_motion_control
-Description: Description of kuka_motion_control
-Version: 0.0.0
-Cflags: -I/usr/local/include -I/usr/include/eigen3 -I/opt/ros/indigo/include
-Libs: -L/usr/local/lib -lkuka_motion_control -l:/opt/ros/indigo/lib/liborocos-kdl.so.1.3.0
-Requires: roscpp rospy std_msgs kdl_parser moveit_core moveit_ros_planning
