@@ -13,13 +13,14 @@ KDLRobotModel::KDLRobotModel(string robot_desciption_param, string planning_scen
 {
 
     //-------------------- Build KDL tree from parameter server param (here robot_description) ----------------------------
-    nh_.param(robot_desciption_param, robot_desc_string_, string("robot_description"));
+    //nh_.param(robot_desciption_param, robot_desc_string_, string("robot_description"));
 
     //Set robot description parameter
     //robot_desc_string_ = robot_desciption_param;
     //cout<<robot_desc_string_<<endl;
 
-    if (!kdl_parser::treeFromString(robot_desc_string_, kdl_tree_)){
+    //if (!kdl_parser::treeFromString(robot_desc_string_, kdl_tree_)){
+    if (!kdl_parser::treeFromParam(robot_desciption_param, kdl_tree_)){
       ROS_ERROR("Failed to construct kdl tree");
       //return false;
     }
@@ -31,14 +32,49 @@ KDLRobotModel::KDLRobotModel(string robot_desciption_param, string planning_scen
 
     //-------------------- Get base and tip links for the Kinematic chains from SRDF ----------------------------
     //Create planning scene
-    robot_model_loader::RobotModelLoader robot_model_loader(robot_desciption_param);
-    robot_model::RobotModelPtr kinematic_model = robot_model_loader.getModel();
-    p_s_ = boost::shared_ptr<planning_scene::PlanningScene>(new planning_scene::PlanningScene(kinematic_model));
+    //robot_model_loader::RobotModelLoader robot_model_loader(robot_desciption_param);
+    //robot_model::RobotModelPtr kinematic_model = robot_model_loader.getModel();
+    //p_s_ = boost::shared_ptr<planning_scene::PlanningScene>(new planning_scene::PlanningScene(kinematic_model));
 
+    //----------- Testing -----------
+    boost::shared_ptr<srdf::Model> srdf_robot;
+    boost::shared_ptr<urdf::ModelInterface> urdf_robot;
+
+    //Get param content
+    std::string content;
+    if (!nh_.getParam(robot_desciption_param, content))
+    {
+         ROS_ERROR("Robot model parameter empty '%s'?", robot_desciption_param.c_str());
+         return;
+    }
+
+    urdf::Model* umodel = new urdf::Model();
+    if (!umodel->initString(content))
+    {
+      ROS_ERROR("Unable to parse URDF from parameter '%s'", robot_desciption_param.c_str());
+      return;
+    }
+    urdf_robot.reset(umodel);
+
+    const std::string srdf_description(robot_desciption_param + "_semantic");
+    std::string scontent;
+    if (!nh_.getParam(srdf_description, scontent))
+    {
+      ROS_ERROR("Robot semantic description not found. Did you forget to define or remap '%s'?", srdf_description.c_str());
+     return;
+   }
+
+    srdf_robot.reset(new srdf::Model());
+    if (!srdf_robot->initString(*urdf_robot, scontent))
+    {
+      ROS_ERROR("Unable to parse SRDF from parameter '%s'", srdf_description.c_str());
+      srdf_robot.reset();
+      return;
+    }
+    //-------------------------------
 
     //Get SRDF data for robot
-    const boost::shared_ptr< const srdf::Model > &srdf_robot = p_s_->getRobotModel()->getSRDF();
-    
+    //const boost::shared_ptr< const srdf::Model > &srdf_robot = p_s_->getRobotModel()->getSRDF();
 
     //Get the groups specified in the urdf
     //cout<<"srdf getName: "<<srdf_robot->getName() <<endl;
@@ -52,7 +88,7 @@ KDLRobotModel::KDLRobotModel(string robot_desciption_param, string planning_scen
 
     //Init joint limits map
     //Get the urdf from the robot model loader
-    const boost::shared_ptr<urdf::ModelInterface> robot_urdf = robot_model_loader.getURDF();
+    //const boost::shared_ptr<urdf::ModelInterface> robot_urdf = robot_model_loader.getURDF();
 
     //Init number of joints
     num_joints_ = 0;       //in total
@@ -89,11 +125,11 @@ KDLRobotModel::KDLRobotModel(string robot_desciption_param, string planning_scen
             kdl_tree_.getChain(srdf_group[i].chains_[0].first,srdf_group[i].chains_[0].second, complete_arm_);
 
             //Get the tip link
-            link = robot_urdf->getLink(srdf_group[i].chains_[0].second);
+            link = urdf_robot->getLink(srdf_group[i].chains_[0].second);
 
             while (link && link->name != srdf_group[i].chains_[0].first)
             {
-                joint = robot_urdf->getJoint(link->parent_joint->name);
+                joint = urdf_robot->getJoint(link->parent_joint->name);
                 if (!joint)
                 {
                     ROS_ERROR("Could not find joint: %s",link->parent_joint->name.c_str());
@@ -103,7 +139,7 @@ KDLRobotModel::KDLRobotModel(string robot_desciption_param, string planning_scen
                     //ROS_INFO( "adding joint: [%s]", joint->name.c_str() );
                     num_joints_++;
                 }
-                link = robot_urdf->getLink(link->getParent()->name);
+                link = urdf_robot->getLink(link->getParent()->name);
             }
 
             //Set the size of the vectors containing the joint names and joint limits
@@ -113,14 +149,14 @@ KDLRobotModel::KDLRobotModel(string robot_desciption_param, string planning_scen
 
 
             //Get the tip link
-            link = robot_urdf->getLink(srdf_group[i].chains_[0].second);
+            link = urdf_robot->getLink(srdf_group[i].chains_[0].second);
 
 
             //Get the joint limits
             unsigned int n = 0;
             while (link && n < num_joints_)
                {
-                   joint = robot_urdf->getJoint(link->parent_joint->name);
+                   joint = urdf_robot->getJoint(link->parent_joint->name);
                    if (joint->type != urdf::Joint::UNKNOWN && joint->type != urdf::Joint::FIXED)
                    {
                        //ROS_INFO( "getting bounds for joint: [%s]", joint->name.c_str() );
@@ -159,7 +195,7 @@ KDLRobotModel::KDLRobotModel(string robot_desciption_param, string planning_scen
                        //cout<<"Joint max val: "<<upper<<endl;
 
                   }
-                   link = robot_urdf->getLink(link->getParent()->name);
+                   link = urdf_robot->getLink(link->getParent()->name);
                }
 
             //Exit SRDF Iteration

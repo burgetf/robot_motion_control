@@ -10,8 +10,11 @@ namespace kuka_motion_controller
 RobotController::RobotController(string robot_desciption_param, string kinematic_chain, string ns_prefix)
 {
     //Read package path from parameter server
-    string package_path_param_name = ns_prefix + "package_path";
-    nh.param(package_path_param_name, package_path_, std::string("/home/burgetf/catkin_ws/src/robot_motion_control/kuka_motion_control"));
+    //string package_path_param_name = ns_prefix + "package_path";
+    //nh.param(package_path_param_name, package_path_, std::string("/home/burgetf/catkin_ws/src/robot_motion_control/kuka_motion_control"));
+
+    //Get package path of "kuka_motion_control"
+    package_path_ = ros::package::getPath("kuka_motion_control");
 
 
     //Set obstacle marker topic
@@ -858,7 +861,8 @@ void RobotController::readEEvelTrajectory(char* ee_vel_traj_filename)
 }
 
 
- //Get Random Configuration (by uniform sampling in the joint range)
+//Get Random Configuration (by uniform sampling in the joint range)
+// -> sample base pose in square environment borders, here min_x = max_x and min_y = max_y
 KDL::JntArray RobotController::getRandomConf(double env_size_x, double env_size_y)
 {
     //Current joint number
@@ -930,7 +934,81 @@ KDL::JntArray RobotController::getRandomConf(double env_size_x, double env_size_
 }
 
 
+//Get Random Configuration (by uniform sampling in the joint range)
+// -> sample base pose in non square environment borders, here min_x != max_x and min_y != max_y
+KDL::JntArray RobotController::getRandomConf(vector<double> env_size_x, vector<double> env_size_y)
+{
+    //Current joint number
+    int joint_num = 0;
+
+    //Random config to be returned
+    KDL::JntArray rand_conf;
+    rand_conf = KDL::JntArray(num_joints_);
+
+    //Generate rand config until associated endeffector position is located above the base platform
+    while(true)
+    {
+        //Reset joint number
+        joint_num = 0;
+
+        for (int j = 0 ; j < kin_chain_.getNrOfSegments(); j++)
+        {
+           if(kin_chain_.getSegment(j).getJoint().getTypeName() != "None")
+           {
+               //For revolute joints
+               if(kin_chain_.getSegment(j).getJoint().getTypeName() == "RotAxis")
+               {
+                    rand_conf(joint_num) = random_number_generator_.uniformReal(q_min_[joint_num], q_max_[joint_num]);
+                    //rand_conf(joint_num) = random_number_generator_.gaussian(opt_pos_[j],0.05);
+               }
+               else //For prismatic joints (translation of base in x,y plane)
+               {
+                   //Prismatic joint belongs to manipulator chain
+                   if(1<joint_num)
+                   {
+                       rand_conf(joint_num) = random_number_generator_.uniformReal(q_min_[joint_num], q_max_[joint_num]);
+                   }
+                   else //Prismatic joint belongs to base chain
+                   {
+                       //If environment is unconfined , i.e. has no borders -> sample from range of prismatic joint
+                       if(env_size_x[0] == 0.0 && env_size_x[1] == 0.0 && env_size_y[0] == 0.0 && env_size_y[1] == 0.0)
+                            rand_conf(joint_num) = random_number_generator_.uniformReal(q_min_[joint_num], q_max_[joint_num]);
+                       else
+                       {
+                            if(joint_num == 0)
+                                rand_conf(joint_num) = random_number_generator_.uniformReal(env_size_x[0], env_size_x[1]);
+                            else if(joint_num == 1)
+                                rand_conf(joint_num) = random_number_generator_.uniformReal(env_size_y[0], env_size_y[1]);
+                            //else
+                            //    ROS_ERROR("getRandomConf does not work for kinematic structures composed of more than two (for the mobile base) prismatic joints!");
+                       }
+                   }
+               }
+
+               //Store joint_names
+               joint_names_.push_back(kin_chain_.getSegment(j).getJoint().getName());
+
+               //cout<<"Random value for joint "<<kin_chain_.getSegment(j).getJoint().getName()<<" is :"<<rand_conf(joint_num)<<endl;
+
+               joint_num++;
+           }
+        }
+
+        //Compute ee pose
+        vector<double> current_ee_pose = RobotModel->compute_FK(kin_chain_,rand_conf);
+
+        //Check whether endeffector is located above the base platform (i.e. z position > 0.0)
+        if(0.0 <= current_ee_pose[2])
+            break;
+    }
+
+    //Return random config
+    return rand_conf;
+}
+
+
 //Get Random Configuration (by gaussian sampling around a mean configuration vector with standard deviation "std_dev")
+// -> sample base pose in square environment borders, here min_x = max_x and min_y = max_y
 KDL::JntArray RobotController::getRandomConf(vector<double> mean_config, double std_dev, double env_size_x, double env_size_y)
 {
     //Current joint number
@@ -1025,6 +1103,102 @@ KDL::JntArray RobotController::getRandomConf(vector<double> mean_config, double 
     return rand_conf;
 }
 
+
+//Get Random Configuration (by gaussian sampling around a mean configuration vector with standard deviation "std_dev")
+// -> sample base pose in non square environment borders, here min_x != max_x and min_y != max_y
+KDL::JntArray RobotController::getRandomConf(vector<double> mean_config, double std_dev, vector<double> env_size_x, vector<double> env_size_y)
+{
+    //Current joint number
+    int joint_num = 0;
+
+    //Random config to be returned
+    KDL::JntArray rand_conf;
+    rand_conf = KDL::JntArray(num_joints_);
+
+    //Generate rand config until associated endeffector position is located above the base platform
+    while(true)
+    {
+        //Reset joint number
+        joint_num = 0;
+
+        //Gaussian sampling for revolute and uniform sampling for prismatic joints
+        for (int j = 0 ; j < kin_chain_.getNrOfSegments(); j++)
+        {
+           if(kin_chain_.getSegment(j).getJoint().getTypeName() != "None")
+           {
+               //For rotational joints: Gaussian Sampling around mean_config
+               if(kin_chain_.getSegment(j).getJoint().getTypeName() == "RotAxis")
+               {
+                   rand_conf(joint_num) = random_number_generator_.gaussian(mean_config[joint_num], std_dev);
+
+                   //For base rotational joint
+                   if(joint_num == 2)
+                       rand_conf(joint_num) = random_number_generator_.uniformReal(q_min_[joint_num], q_max_[joint_num]);
+
+                   //Check for joint limits violation
+                   if(rand_conf(joint_num) < q_min_[joint_num])
+                       rand_conf(joint_num) = q_min_[joint_num] + 0.01;
+                   if(q_max_[joint_num] < rand_conf(joint_num))
+                       rand_conf(joint_num) = q_max_[joint_num] - 0.01;
+
+               }
+               else  //For prismatic joints: Uniform Sampling from joint range
+               {
+                   //Prismatic joint belongs to manipulator chain
+                   if(1<joint_num)
+                   {
+                       rand_conf(joint_num) = random_number_generator_.gaussian(mean_config[joint_num], std_dev);
+
+                       //Check for joint limits violation
+                       if(rand_conf(joint_num) < q_min_[joint_num])
+                           rand_conf(joint_num) = q_min_[joint_num] + 0.01;
+                       if(q_max_[joint_num] < rand_conf(joint_num))
+                           rand_conf(joint_num) = q_max_[joint_num] - 0.01;
+                   }
+                   else //Prismatic joint belongs to base chain
+                   {
+                       //If environment is unconfined , i.e. has no borders -> sample from range of prismatic joint
+                       if(env_size_x[0] == 0.0 && env_size_x[1] == 0.0 && env_size_y[0] == 0.0 && env_size_y[1] == 0.0)
+                            rand_conf(joint_num) = random_number_generator_.uniformReal(q_min_[joint_num], q_max_[joint_num]);
+                       else
+                       {
+                           //For base translational joint in x-direction
+                           if(joint_num == 0)
+                               rand_conf(joint_num) = random_number_generator_.uniformReal(env_size_x[0], env_size_x[1]);
+                           else if(joint_num == 1) //For base translational joint in y-direction
+                               rand_conf(joint_num) = random_number_generator_.uniformReal(env_size_y[0], env_size_y[1]);
+                           //else
+                               //ROS_ERROR("getRandomConf does not work for kinematic structures composed of more than two (for the mobile base) prismatic joints!");
+                       }
+                   }
+
+               }
+
+
+               //cout<<"Mean config value: "<<mean_config[j]<<endl;
+               //cout<<"Sampled config value: "<<rand_conf(joint_num)<<endl;
+
+               //Store joint_names
+               joint_names_.push_back(kin_chain_.getSegment(j).getJoint().getName());
+
+               //cout<<"Random value for joint "<<kin_chain_.getSegment(j).getJoint().getName()<<" is :"<<rand_conf(joint_num)<<endl;
+
+               joint_num++;
+           }
+        }
+        //cout<<endl;
+
+        //Compute ee pose
+        vector<double> current_ee_pose = RobotModel->compute_FK(kin_chain_,rand_conf);
+
+        //Check whether endeffector is located above the base platform (i.e. z position > 0.0)
+        if(0.0 <= current_ee_pose[2])
+            break;
+    }
+
+    //Return random config
+    return rand_conf;
+}
 
 
 //Set Random Start Configuration
@@ -1153,6 +1327,9 @@ void RobotController::set_EE_goal_pose(vector<double> ee_pose, char *traj_file_n
     //-------------------------------- SET ENDEFFECTOR POSE ---------------------------------
     //Set the endeffector cartesian goal pose
     current_goal_ee_pose_ = ee_pose;
+
+    //Orientation Error computation based on literature:
+    // - Robotics Modeling Planning and Control.pdf (page 140), Equation (3.91)
 
     //Skew-symmetric matrix from endeffector goal pose
     vector< vector<double> > current_goal_ee_pose_skew_mat;
@@ -1291,6 +1468,9 @@ void RobotController::set_EE_goal_pose(vector<double> ee_pose)
     //-------------------------------- SET ENDEFFECTOR POSE ---------------------------------
     //Set the endeffector cartesian goal pose
     current_goal_ee_pose_ = ee_pose;
+
+    //Orientation Error computation based on literature:
+    // - Robotics Modeling Planning and Control.pdf (page 140), Equation (3.91)
 
     //Skew-symmetric matrix from endeffector goal pose
     vector< vector<double> > current_goal_ee_pose_skew_mat;
@@ -1879,17 +2059,8 @@ void RobotController::update_error_vec(vector<double> curr_ee_pose, vector<doubl
     //cout<<endl;
 
 
+    //ROS_INFO_STREAM("Current error variable damped least squares:"<<error_[0]<<" "<<error_[1]<<" "<<error_[2]<<" "<<error_[3]<<" "<<error_[4]<<" "<<error_[5]);
 
-    //    cout<<"Current error: "<<error_norm_<<endl;
-    //    cout<<"X: "<<error_[0]<<endl;
-    //    cout<<"Y: "<<error_[1]<<endl;
-    //    cout<<"Z: "<<error_[2]<<endl;
-    //    cout<<"rotX: "<<error_[3]<<endl;
-    //    cout<<"rotY: "<<error_[4]<<endl;
-    //    cout<<"rotZ: "<<error_[5]<<endl;
-
-    //cout<<"Current error norm: "<<error_norm_<<endl;
-    //cout<<"Maximum error norm: "<<error_bound_norm<<endl;
 }
 
 
@@ -6432,6 +6603,15 @@ vector<double> RobotController::compute_task_error(vector<double> retract_conf, 
     //Invert task frame transform to get world frame expressed in task frame T^t_0
     KDL::Frame inv_task_frame_transform = task_frame.Inverse();
 
+
+//    cout<<"x t_init: "<<task_frame.p.x()<<endl;
+//    cout<<"y t_init: "<<task_frame.p.y()<<endl;
+//    cout<<"z t_init: "<<task_frame.p.z()<<endl;
+
+//    cout<<"x t_inv: "<<inv_task_frame_transform.p.x()<<endl;
+//    cout<<"y t_inv: "<<inv_task_frame_transform.p.y()<<endl;
+//    cout<<"z t_inv: "<<inv_task_frame_transform.p.z()<<endl;
+
 //    double q_x,q_y,q_z,q_w;
 //    task_frame.M.GetQuaternion(q_x,q_y,q_z,q_w);
 
@@ -6460,9 +6640,18 @@ vector<double> RobotController::compute_task_error(vector<double> retract_conf, 
     // -> that means that the kinematics of the robot is extended by a grasp transform
     KDL::Frame curr_ee_transfom = RobotModel->compute_FK_frame(kin_chain_,curr_retract_conf) * grasp_transform;
 
+//    cout<<"x b: "<<curr_ee_transfom.p.x()<<endl;
+//    cout<<"y b: "<<curr_ee_transfom.p.y()<<endl;
+//    cout<<"z b: "<<curr_ee_transfom.p.z()<<endl;
+
+
     //Compute transformation between task frame and current endeffector frame
     KDL::Frame task_frame_to_ee_transform = inv_task_frame_transform * curr_ee_transfom;
 
+
+//    cout<<"x t: "<<task_frame_to_ee_transform.p.x()<<endl;
+//    cout<<"y t: "<<task_frame_to_ee_transform.p.y()<<endl;
+//    cout<<"z t: "<<task_frame_to_ee_transform.p.z()<<endl;
 
     // ++ Get task error + select only constraint components (others set to zero -> i.e. no error since they're unconstraint)
     vector<double> delta_vec(6);
@@ -6518,10 +6707,10 @@ vector<double> RobotController::compute_task_error(vector<double> retract_conf, 
         else
         {
             //Coordinate is unconstraints
-            task_error[i] = 0.0;
+            //task_error[i] = 0.0;
         }
 
-        //cout<<coordinate_dev[i].first<<" "<<coordinate_dev[i].second<<endl;
+        //cout<<task_error[i]<<" ";
     }
     //cout<<endl;
 
@@ -6549,15 +6738,17 @@ bool RobotController::is_error_within_bounds(vector<double> task_space_error)
     //Flag to be returned
     bool within_bounds = true;
 
-    for (int i = 0; i<task_space_error.size() ; i++)
+    for (int i = 0; i < task_space_error.size() ; i++)
     {
         //Set flag to false
-        if(task_space_error[i] != 0)
+        if(fabs(task_space_error[i]) > 0.0001)
             within_bounds = false;
     }
 
     return within_bounds;
 }
+
+
 
 //Convert XYZ (Roll-Pitch-Yaw) Euler angles to Quaternion
 vector<double> RobotController::convertEulertoQuat(double rotX, double rotY, double rotZ)

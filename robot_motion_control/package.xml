@@ -17,6 +17,8 @@
   
   
   <run_depend>kuka_motion_control</run_depend>
+  <run_depend>endeffector_target_tracking</run_depend>
+  
   
   
 </package>

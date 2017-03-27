@@ -64,9 +64,12 @@ class RobotController
 
     //Get Random Configuration (by uniform sampling in the joint range)
     KDL::JntArray getRandomConf(double env_size_x, double env_size_y);
+    KDL::JntArray getRandomConf(vector<double> env_size_x, vector<double> env_size_y);
 
     //Get Random Configuration (by gaussian sampling around a mean configuration vector)
     KDL::JntArray getRandomConf(vector<double> mean_config, double std_dev, double env_size_x, double env_size_y);
+    KDL::JntArray getRandomConf(vector<double> mean_config, double std_dev, vector<double> env_size_x, vector<double> env_size_y);
+
 
     //Set a specific Start Configuration as map
     void setStartConf(map<string, double> start_config);
@@ -193,6 +196,7 @@ class RobotController
     //First Order Retraction
     bool run_config_retraction(vector<double> &retract_conf, KDL::Frame task_frame, KDL::Frame grasp_transform, vector<int> constraint_vector, vector<pair<double,double> > coordinate_dev, int max_iter);
     vector<double> compute_task_error(vector<double> retract_conf, KDL::Frame task_frame, KDL::Frame grasp_transform, vector<int> constraint_vector, vector<pair<double,double> > coordinate_dev);
+    //Error within bounds check (with bounds fixed or given as input)
     bool is_error_within_bounds(vector<double> task_space_error);
     Eigen::MatrixXf getTaskFrameJacobian(KDL::Chain kin_chain, vector<double> retract_conf, KDL::Frame task_frame);
 

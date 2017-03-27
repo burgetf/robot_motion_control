@@ -76,8 +76,12 @@ int main(int argc, char** argv)
     cout<<endl;
 
     //Read package path from parameter server
+    //std::string package_path;
+    //nh.param("package_path", package_path, std::string("/home/burgetf/catkin_ws/src/robot_motion_control/kuka_motion_control"));
+
+    //Get package path of "kuka_motion_control"
     std::string package_path;
-    nh.param("package_path", package_path, std::string("/home/burgetf/catkin_ws/src/robot_motion_control/kuka_motion_control"));
+    package_path = ros::package::getPath("kuka_motion_control");
 
 
     //Set path to the file containing the robot start configuration
