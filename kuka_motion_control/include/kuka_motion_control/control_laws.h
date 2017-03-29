@@ -45,6 +45,7 @@ class RobotController
 {
     public:
     RobotController(string robot_desciption_param, string kinematic_chain, string ns_prefix = "");
+    RobotController(boost::shared_ptr<kuka_motion_controller::KDLRobotModel> kdl_robot_model, string robot_desciption_param, string kinematic_chain, string ns_prefix= "");
     ~RobotController();
 
     //Compute the forward kinematics for a kinematic chain

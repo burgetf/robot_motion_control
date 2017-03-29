@@ -36,7 +36,8 @@ KDLRobotModel::KDLRobotModel(string robot_desciption_param, string planning_scen
     //robot_model::RobotModelPtr kinematic_model = robot_model_loader.getModel();
     //p_s_ = boost::shared_ptr<planning_scene::PlanningScene>(new planning_scene::PlanningScene(kinematic_model));
 
-    //----------- Testing -----------
+
+    //Get urdf and srdf info
     boost::shared_ptr<srdf::Model> srdf_robot;
     boost::shared_ptr<urdf::ModelInterface> urdf_robot;
 
@@ -71,7 +72,7 @@ KDLRobotModel::KDLRobotModel(string robot_desciption_param, string planning_scen
       srdf_robot.reset();
       return;
     }
-    //-------------------------------
+
 
     //Get SRDF data for robot
     //const boost::shared_ptr< const srdf::Model > &srdf_robot = p_s_->getRobotModel()->getSRDF();

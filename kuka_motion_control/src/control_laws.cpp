@@ -9,9 +9,6 @@ namespace kuka_motion_controller
 //Constructor
 RobotController::RobotController(string robot_desciption_param, string kinematic_chain, string ns_prefix)
 {
-    //Read package path from parameter server
-    //string package_path_param_name = ns_prefix + "package_path";
-    //nh.param(package_path_param_name, package_path_, std::string("/home/burgetf/catkin_ws/src/robot_motion_control/kuka_motion_control"));
 
     //Get package path of "kuka_motion_control"
     package_path_ = ros::package::getPath("kuka_motion_control");
@@ -32,20 +29,14 @@ RobotController::RobotController(string robot_desciption_param, string kinematic
 
     //Get topic prefix in constructor argument list -> to set topic names e.g. "robotino_group/planning_scene"
     string planning_scene_ns = ns_prefix + "planning_scene";
-    string joint_states_ns = ns_prefix + "joint_states";
-    string attached_collision_object_ns = ns_prefix + "attached_collision_object";
-
-    string collision_object_ns = ns_prefix + "collision_object";
-    string planning_scene_world_ns = ns_prefix + "planning_scene_world";
-
     string planning_scene_service_ns = ns_prefix + "get_planning_scene";
-
     string endeffector_trajectory_ns = ns_prefix + "endeffector_trajectory";
 
-//    psm_->startSceneMonitor(planning_scene_ns);
-//    psm_->startStateMonitor(joint_states_ns, attached_collision_object_ns);
-//    psm_->startWorldGeometryMonitor(collision_object_ns,planning_scene_world_ns, false);
-    //m_planning_scene_monitor->DEFAULT_PLANNING_SCENE_SERVICE = planning_scene_service_ns;
+    //string joint_states_ns = ns_prefix + "joint_states";
+    //string attached_collision_object_ns = ns_prefix + "attached_collision_object";
+    //string collision_object_ns = ns_prefix + "collision_object";
+    //string planning_scene_world_ns = ns_prefix + "planning_scene_world";
+
 
     //Name of Planning Scene Service;
     m_planning_scene_service = planning_scene_service_ns;
@@ -61,13 +52,13 @@ RobotController::RobotController(string robot_desciption_param, string kinematic
     RobotModel = boost::shared_ptr<KDLRobotModel>(new KDLRobotModel(robot_desciption_param, planning_scene_ns, endeffector_trajectory_ns, kinematic_goup_));
 
     //Get the kinematic chain
-    if (kinematic_goup_ == "pr2_base" || kinematic_goup_ == "pr2_base_arm" || kinematic_goup_ == "pr2_arm" || kinematic_goup_ == "kuka_complete_arm" || kinematic_goup_ == "omnirob_lbr_sdh" || kinematic_goup_ == "omnirob_base" || kinematic_goup_ == "robotino_robot")
-    {
+    //if (kinematic_goup_ == "pr2_base" || kinematic_goup_ == "pr2_base_arm" || kinematic_goup_ == "pr2_arm" || kinematic_goup_ == "kuka_complete_arm" || kinematic_goup_ == "omnirob_lbr_sdh" || kinematic_goup_ == "omnirob_base" || kinematic_goup_ == "robotino_robot")
+    //{
         kin_chain_ = RobotModel->getCompleteArmChain();
         //ROS_INFO("Kinematic Chain perceived ...");
-    }
-    else
-        ROS_ERROR("The selected chain is not available for control here!");
+    //}
+    //else
+    //    ROS_ERROR("The selected chain is not available for control here!");
 
 
     //Get Number of joints for the chain
@@ -200,6 +191,196 @@ RobotController::RobotController(string robot_desciption_param, string kinematic
     //ROS_INFO("Robot Controller Constructor done!!!");
 
 }
+
+
+RobotController::RobotController(boost::shared_ptr<kuka_motion_controller::KDLRobotModel> kdl_robot_model, string robot_desciption_param, string kinematic_chain, string ns_prefix)
+{
+    //Get package path of "kuka_motion_control"
+    package_path_ = ros::package::getPath("kuka_motion_control");
+
+
+    //Set obstacle marker topic
+    obstacle_pub_ = nh.advertise<visualization_msgs::Marker>("visualization_obstacles", 10);
+
+    //Set base platform as collision object marker topic
+    base_pub_ = nh.advertise<visualization_msgs::Marker>("visualization_base_platform", 10);
+
+
+    // -------------------------- START: SETUP PLANNING SCENE AND ROBOT MODEL -------------
+
+    //Create planning scene monitor
+    //psm_ = boost::shared_ptr<planning_scene_monitor::PlanningSceneMonitor>(new planning_scene_monitor::PlanningSceneMonitor(robot_desciption_param));
+    psm_ =  boost::make_shared<planning_scene_monitor::PlanningSceneMonitor>(robot_desciption_param);
+
+    //Get topic prefix in constructor argument list -> to set topic names e.g. "robotino_group/planning_scene"
+    string planning_scene_ns = ns_prefix + "planning_scene";
+    string planning_scene_service_ns = ns_prefix + "get_planning_scene";
+
+    //string joint_states_ns = ns_prefix + "joint_states";
+    //string attached_collision_object_ns = ns_prefix + "attached_collision_object";
+    //string collision_object_ns = ns_prefix + "collision_object";
+    //string planning_scene_world_ns = ns_prefix + "planning_scene_world";
+    //string endeffector_trajectory_ns = ns_prefix + "endeffector_trajectory";
+
+//    psm_->startSceneMonitor(planning_scene_ns);
+//    psm_->startStateMonitor(joint_states_ns, attached_collision_object_ns);
+//    psm_->startWorldGeometryMonitor(collision_object_ns,planning_scene_world_ns, false);
+    //m_planning_scene_monitor->DEFAULT_PLANNING_SCENE_SERVICE = planning_scene_service_ns;
+
+    //Name of Planning Scene Service;
+    m_planning_scene_service = planning_scene_service_ns;
+
+    //Planning Scene Publisher
+    scene_pub_ = nh.advertise<moveit_msgs::PlanningScene>(planning_scene_ns, 10);
+    ros::Duration(0.5).sleep();
+
+    //Set Kinematic group
+    kinematic_goup_ = kinematic_chain;
+
+    //Create Robot model
+    RobotModel = kdl_robot_model;
+
+    //Get the kinematic chain
+    //if (kinematic_goup_ == "pr2_base" || kinematic_goup_ == "pr2_base_arm" || kinematic_goup_ == "pr2_arm" || kinematic_goup_ == "kuka_complete_arm" || kinematic_goup_ == "omnirob_lbr_sdh" || kinematic_goup_ == "omnirob_base" || kinematic_goup_ == "robotino_robot")
+    //{
+        kin_chain_ = RobotModel->getCompleteArmChain();
+        //ROS_INFO("Kinematic Chain perceived ...");
+    //}
+    //else
+    //    ROS_ERROR("The selected chain is not available for control here!");
+
+
+    //Get Number of joints for the chain
+    num_joints_ = kin_chain_.getNrOfJoints();
+
+    //Provides the min, max and center value for all joint contained in a given kinematic chain
+    q_min_.resize(num_joints_);
+    q_max_.resize(num_joints_);
+    opt_pos_.resize(num_joints_);
+    RobotModel->getJointRangeData(kin_chain_ , q_min_, q_max_, opt_pos_);
+
+
+    //Initialize current configuration
+    current_config_ = KDL::JntArray(num_joints_);
+    joint_weights_ = KDL::JntArray(num_joints_);
+
+    //Set Random start configuration
+    setRandomStartConf();
+
+    // -------------------------- END: SETUP PLANNING SCENE AND ROBOT MODEL ---------------
+
+
+
+    // -------------------------- START: CONTROL PARAMETER SETUP --------------------------
+    //Init PD Motion Strategy
+    pd_motion_strategy_ = 0;
+
+    //Velocity output for joints
+    q_dot_out_ = KDL::JntArray(num_joints_);
+
+    //Initialize control parameters
+
+    //Joint Velocity Integration
+    delta_t_ = 0.007;
+    //Experience
+    //  -> 0.0025 from Paper "A control-based approach to task-constrained motion planning"
+    //  -> previously used 0.008
+
+    //Secondary task gain
+    gain_sec_task_ = -2.2;//-2.2;
+    //best value is -1.1 according to Jonas
+    // - between 0 and -0.38 very good convergence but higher failrate due to JL violation
+    // - between -0.38 and -1.1 higher failrate due to convergence, but lower failrate due to JL violation
+    // - from -1.1 and lower, higher failrate due to convergence, lower failrate due to JL violation, but also more IK iterations
+
+    min_change_rate_ = 0.1;//0.008;
+    index_last_joint_activated_ = 0;
+
+    //Flag indicating whether joint values are within their admissible range
+    jl_ok_ = true;
+
+    //Initialize error norm
+    error_norm_ = 1000.0;
+
+    //Gain for the cartesian endeffector error (used in controller)
+    error_gain_ = 1.0;
+
+    //Init Variables Constraint Vector (all variables constraint, i.e. var_constraint_vec_ = 1 for all task dimensions)
+    for (int i = 0 ; i < 6 ; i++)
+        var_constraint_vec_.push_back(1);
+
+    //Activation parameter (for shaping JL Gradient function used in Null Space Projection Methods, must be in the range 0 < activation_param < 0.5)
+    jl_activation_param_ = 0.4; //0.2
+
+    //Constant Damping factor for damped-least squares method
+    const_lambda_fac_ = 0.05; //0.03;
+
+    //Variables for variable damping with DLS (based on manipulability analysis)
+    min_manip_treshold_ = 0.003; //0.0004
+    max_damping_factor_ = 0.07; //0.07;
+
+    //Treshold for error norm
+    error_treshold_ = 0.01;//0.001;
+
+    // -------------------------- END: CONTROL PARAMETER SETUP --------------------------
+
+
+    // -------------------------- START: COLLISION AVOIDANCE SETUP --------------------------
+
+    //Select control points at the following joints
+    joint_indices_for_CA_.push_back(8); //at endeffector
+    joint_indices_for_CA_.push_back(5); //at upper arm
+    joint_indices_for_CA_.push_back(4); //at elbow
+    joint_indices_for_CA_.push_back(3); //at lower arm
+    joint_indices_for_CA_.push_back(2); //at base
+
+    //Radius of spheres used as safety margin around control points and to compute potential field
+    ca_sphere_radius_ = 0.175;
+    //Shape factor to influence behavior of repulsive vector magnitude
+    ca_alpha_shape_fac_ = 6.0;
+    //Maximum magnitude of repulsive vector
+    max_mag_rep_vec_ = 3.0; // 3 [m/s]
+
+    //Set CA inactive
+    collision_avoidance_active_ = false;
+
+    //Parameter used for Joint velocity bounds shaping for robot body collision avoidance
+    max_joint_velocity_ = 0.6;
+
+    // -------------------------- END: COLLISION AVOIDANCE SETUP --------------------------
+
+
+    // -------------------------- START: FLAGS AND CONSTANTS ----------------------------
+    //Set color for endeffector trace
+    color_rgb_.push_back(0.54); //red
+    color_rgb_.push_back(0.168); //green
+    color_rgb_.push_back(0.883); //blue
+
+    //Set sleep duration between configuration
+    sleep_duration_between_confs_ = 0.0008;//0.0008;
+
+    //Maximum number of points for the endeffector trajectory trace
+    max_ee_trace_points_ = 5000; //Note: RViz crashed when using more than 8000 Line strip points!!!!!
+
+    //Flag indicating whether ee trajectory tracking is enabled
+    traj_tracking_enabled_ = false;
+
+    //Flag indicating when joint weight gradient changes direction (in that case the joint weight update rate is lowered)
+    joint_weight_gradient_direction_ = 0;
+
+    //Maximum value for joint weight change
+    for (int i = 0 ; i < num_joints_ ; i++)
+        max_joint_weight_modification_.push_back(0.5);
+
+    //Store mean trajectory error using the joint weights of the previous iteration
+    previous_mean_joint_trajectory_error_ = 1000.0;
+
+    // -------------------------- END: FLAGS AND CONSTANTS ----------------------------
+
+    //ROS_INFO("Robot Controller Constructor done!!!");
+
+}
+
 
 //Destructor
 RobotController::~RobotController()
@@ -1659,7 +1840,7 @@ void RobotController::set_motion_strategy(int strategy_index)
                 }
 
 
-                cout<<"Weight for joint "<<kin_chain_.getSegment(j).getJoint().getName()<<" is: "<<joint_weights_(curr_idx)<<endl;
+                //cout<<"Weight for joint "<<kin_chain_.getSegment(j).getJoint().getName()<<" is: "<<joint_weights_(curr_idx)<<endl;
                 w_joints_[kin_chain_.getSegment(j).getJoint().getName()] = joint_weights_(curr_idx);
 
 
